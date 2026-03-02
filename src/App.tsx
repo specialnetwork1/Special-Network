@@ -15,6 +15,7 @@ import {
   CreditCard,
   Wifi,
   AlertCircle,
+  Menu,
   X,
   ChevronRight
 } from 'lucide-react';
@@ -151,13 +152,9 @@ const AdminDashboard = () => {
   const { status, refresh } = useMikrotik();
 
   useEffect(() => {
-    // Simulate fetching stats
-    setStats({
-      totalUsers: 124,
-      activeUsers: 118,
-      dueBills: 12,
-      revenue: 45200
-    });
+    fetch('/api/admin/stats', {
+      headers: { 'Authorization': `Bearer ${localStorage.getItem('token')}` }
+    }).then(res => res.json()).then(setStats);
   }, []);
 
   const data = [
@@ -315,19 +312,87 @@ const AdminDashboard = () => {
 
 const UserManagement = () => {
   const [users, setUsers] = useState<any[]>([]);
-  const [showAdd, setShowAdd] = useState(false);
   const [search, setSearch] = useState('');
+  const [showModal, setShowModal] = useState(false);
+  const [editingUser, setEditingUser] = useState<any>(null);
+  const [formData, setFormData] = useState({
+    username: '',
+    password: '',
+    full_name: '',
+    phone: '',
+    package_name: '',
+    monthly_fee: ''
+  });
 
-  useEffect(() => {
+  const fetchUsers = () => {
     fetch('/api/users', {
       headers: { 'Authorization': `Bearer ${localStorage.getItem('token')}` }
     }).then(res => res.json()).then(setUsers);
-  }, []);
+  };
 
-  const filteredUsers = users.filter(u => 
-    u.full_name.toLowerCase().includes(search.toLowerCase()) || 
-    u.username.toLowerCase().includes(search.toLowerCase())
-  );
+  useEffect(fetchUsers, []);
+
+  const handleOpenAdd = () => {
+    setEditingUser(null);
+    setFormData({
+      username: '',
+      password: '',
+      full_name: '',
+      phone: '',
+      package_name: '',
+      monthly_fee: ''
+    });
+    setShowModal(true);
+  };
+
+  const handleOpenEdit = (user: any) => {
+    setEditingUser(user);
+    setFormData({
+      username: user.username,
+      password: '', // Don't show password
+      full_name: user.full_name,
+      phone: user.phone || '',
+      package_name: user.package_name || '',
+      monthly_fee: user.monthly_fee?.toString() || ''
+    });
+    setShowModal(true);
+  };
+
+  const handleSubmit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    const url = editingUser ? `/api/users/${editingUser.id}` : '/api/users';
+    const method = editingUser ? 'PUT' : 'POST';
+    
+    const res = await fetch(url, {
+      method,
+      headers: { 
+        'Authorization': `Bearer ${localStorage.getItem('token')}`,
+        'Content-Type': 'application/json'
+      },
+      body: JSON.stringify(formData)
+    });
+
+    if (res.ok) {
+      setShowModal(false);
+      fetchUsers();
+    } else {
+      const data = await res.json();
+      alert(data.error || "Failed to save user");
+    }
+  };
+
+  const deleteUser = async (id: number) => {
+    if (!confirm("Are you sure you want to delete this user? This will also delete their bills and tickets.")) return;
+    
+    const res = await fetch(`/api/users/${id}`, {
+      method: 'DELETE',
+      headers: { 'Authorization': `Bearer ${localStorage.getItem('token')}` }
+    });
+
+    if (res.ok) {
+      fetchUsers();
+    }
+  };
 
   const toggleUserStatus = async (user: any) => {
     const newStatus = user.status === 'active' ? 'inactive' : 'active';
@@ -340,18 +405,20 @@ const UserManagement = () => {
       body: JSON.stringify({ id: user.id, status: newStatus })
     });
     if (res.ok) {
-      // Refresh user list
-      fetch('/api/users', {
-        headers: { 'Authorization': `Bearer ${localStorage.getItem('token')}` }
-      }).then(res => res.json()).then(setUsers);
+      fetchUsers();
     }
   };
+
+  const filteredUsers = users.filter(u => 
+    u.full_name.toLowerCase().includes(search.toLowerCase()) || 
+    u.username.toLowerCase().includes(search.toLowerCase())
+  );
 
   return (
     <div className="space-y-6">
       <div className="flex justify-between items-center">
         <h2 className="text-2xl font-bold">User Management</h2>
-        <Button onClick={() => setShowAdd(true)}><Plus size={20} /> Add User</Button>
+        <Button onClick={handleOpenAdd}><Plus size={20} /> Add User</Button>
       </div>
 
       <Card className="p-0 overflow-hidden">
@@ -404,7 +471,10 @@ const UserManagement = () => {
                     >
                       {user.status === 'active' ? 'Disable' : 'Enable'}
                     </Button>
-                    <Button variant="ghost" className="text-xs">Edit</Button>
+                    <Button variant="ghost" className="text-xs" onClick={() => handleOpenEdit(user)}>Edit</Button>
+                    <button onClick={() => deleteUser(user.id)} className="p-2 text-red-500 hover:bg-red-50 rounded-lg transition-colors">
+                      <XCircle size={18} />
+                    </button>
                   </td>
                 </tr>
               ))}
@@ -413,9 +483,8 @@ const UserManagement = () => {
         </div>
       </Card>
       
-      {/* Add User Modal Placeholder */}
       <AnimatePresence>
-        {showAdd && (
+        {showModal && (
           <div className="fixed inset-0 bg-black/50 backdrop-blur-sm flex items-center justify-center p-4 z-50">
             <motion.div 
               initial={{ scale: 0.9, opacity: 0 }}
@@ -424,19 +493,52 @@ const UserManagement = () => {
               className="w-full max-w-lg"
             >
               <Card className="p-8">
-                <h3 className="text-xl font-bold mb-6">Add New Subscriber</h3>
-                <div className="grid grid-cols-2 gap-4 mb-6">
-                  <Input label="Full Name" placeholder="John Doe" />
-                  <Input label="Username" placeholder="john_pppoe" />
-                  <Input label="Password" type="password" />
-                  <Input label="Phone" placeholder="017..." />
-                  <Input label="Package" placeholder="10 Mbps" />
-                  <Input label="Monthly Fee" placeholder="800" />
-                </div>
-                <div className="flex gap-3">
-                  <Button className="flex-1" onClick={() => setShowAdd(false)}>Create User</Button>
-                  <Button variant="secondary" onClick={() => setShowAdd(false)}>Cancel</Button>
-                </div>
+                <h3 className="text-xl font-bold mb-6">{editingUser ? 'Edit Subscriber' : 'Add New Subscriber'}</h3>
+                <form onSubmit={handleSubmit} className="space-y-4">
+                  <div className="grid grid-cols-2 gap-4">
+                    <Input 
+                      label="Full Name" 
+                      value={formData.full_name} 
+                      onChange={(e: any) => setFormData({...formData, full_name: e.target.value})}
+                      required
+                    />
+                    <Input 
+                      label="Username" 
+                      value={formData.username} 
+                      onChange={(e: any) => setFormData({...formData, username: e.target.value})}
+                      required
+                    />
+                    {!editingUser && (
+                      <Input 
+                        label="Password" 
+                        type="password" 
+                        value={formData.password} 
+                        onChange={(e: any) => setFormData({...formData, password: e.target.value})}
+                        required
+                      />
+                    )}
+                    <Input 
+                      label="Phone" 
+                      value={formData.phone} 
+                      onChange={(e: any) => setFormData({...formData, phone: e.target.value})}
+                    />
+                    <Input 
+                      label="Package" 
+                      value={formData.package_name} 
+                      onChange={(e: any) => setFormData({...formData, package_name: e.target.value})}
+                    />
+                    <Input 
+                      label="Monthly Fee" 
+                      type="number"
+                      value={formData.monthly_fee} 
+                      onChange={(e: any) => setFormData({...formData, monthly_fee: e.target.value})}
+                    />
+                  </div>
+                  <div className="flex gap-3 pt-4">
+                    <Button type="submit" className="flex-1">{editingUser ? 'Update User' : 'Create User'}</Button>
+                    <Button type="button" variant="secondary" onClick={() => setShowModal(false)}>Cancel</Button>
+                  </div>
+                </form>
               </Card>
             </motion.div>
           </div>
@@ -453,11 +555,13 @@ const CustomerPortal = () => {
   const [payingBill, setPayingBill] = useState<any>(null);
   const [paymentMethod, setPaymentMethod] = useState<'bKash' | 'Nagad' | null>(null);
   const [paymentStep, setPaymentStep] = useState<'method' | 'processing' | 'success'>('method');
+  const [gatewaySettings, setGatewaySettings] = useState<any>({});
 
   useEffect(() => {
     const headers = { 'Authorization': `Bearer ${localStorage.getItem('token')}` };
     fetch('/api/bills', { headers }).then(res => res.json()).then(setBills);
     fetch('/api/tickets', { headers }).then(res => res.json()).then(setTickets);
+    fetch('/api/settings', { headers }).then(res => res.json()).then(setGatewaySettings);
   }, []);
 
   const generateInvoice = (bill: any) => {
@@ -662,7 +766,9 @@ const CustomerPortal = () => {
                           <div className="w-12 h-12 bg-[#D12053] rounded-lg flex items-center justify-center text-white font-bold text-xl">b</div>
                           <div className="text-left">
                             <p className="font-bold text-[#D12053]">bKash</p>
-                            <p className="text-xs text-gray-500">Pay using bKash account</p>
+                            <p className="text-xs text-gray-500">
+                              {gatewaySettings.bkash_number ? `Send to: ${gatewaySettings.bkash_number}` : 'Pay using bKash account'}
+                            </p>
                           </div>
                         </div>
                         <ChevronRight className="text-[#D12053] opacity-0 group-hover:opacity-100 transition-opacity" />
@@ -676,7 +782,9 @@ const CustomerPortal = () => {
                           <div className="w-12 h-12 bg-[#F7941D] rounded-lg flex items-center justify-center text-white font-bold text-xl">n</div>
                           <div className="text-left">
                             <p className="font-bold text-[#F7941D]">Nagad</p>
-                            <p className="text-xs text-gray-500">Pay using Nagad account</p>
+                            <p className="text-xs text-gray-500">
+                              {gatewaySettings.nagad_number ? `Send to: ${gatewaySettings.nagad_number}` : 'Pay using Nagad account'}
+                            </p>
                           </div>
                         </div>
                         <ChevronRight className="text-[#F7941D] opacity-0 group-hover:opacity-100 transition-opacity" />
@@ -726,6 +834,7 @@ const Layout = ({ children }: { children: React.ReactNode }) => {
   const { user, logout } = useAuth();
   const { status } = useMikrotik();
   const navigate = useNavigate();
+  const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false);
 
   const menuItems = user?.role === 'admin' ? [
     { icon: LayoutDashboard, label: 'Dashboard', path: '/' },
@@ -739,56 +848,95 @@ const Layout = ({ children }: { children: React.ReactNode }) => {
     { icon: Ticket, label: 'Support', path: '/tickets' },
   ];
 
+  const NavContent = () => (
+    <>
+      <div className="p-6 flex items-center gap-3">
+        <div className="w-8 h-8 bg-black rounded-lg flex items-center justify-center">
+          <Wifi size={18} className="text-white" />
+        </div>
+        <span className="font-bold text-lg">ISP Manager</span>
+      </div>
+      <nav className="flex-1 px-4 space-y-1 mt-4">
+        {menuItems.map((item) => (
+          <Link 
+            key={item.path} 
+            to={item.path}
+            onClick={() => setIsMobileMenuOpen(false)}
+            className={cn(
+              "flex items-center gap-3 px-4 py-3 rounded-xl transition-all font-medium",
+              window.location.pathname === item.path 
+                ? "bg-black text-white" 
+                : "text-gray-500 hover:text-black hover:bg-gray-50"
+            )}
+          >
+            <item.icon size={20} />
+            {item.label}
+          </Link>
+        ))}
+      </nav>
+      <div className="p-4 border-t border-black/5">
+        <button 
+          onClick={logout}
+          className="flex items-center gap-3 px-4 py-3 w-full text-red-500 hover:bg-red-50 rounded-xl transition-all font-medium"
+        >
+          <LogOut size={20} />
+          Logout
+        </button>
+      </div>
+    </>
+  );
+
   return (
     <div className="min-h-screen bg-[#F8F9FA] flex">
-      {/* Sidebar */}
+      {/* Sidebar Desktop */}
       <aside className="w-64 bg-white border-r border-black/5 flex flex-col hidden md:flex sticky top-0 h-screen">
-        <div className="p-6 flex items-center gap-3">
-          <div className="w-8 h-8 bg-black rounded-lg flex items-center justify-center">
-            <Wifi size={18} className="text-white" />
-          </div>
-          <span className="font-bold text-lg">ISP Manager</span>
-        </div>
-        <nav className="flex-1 px-4 space-y-1 mt-4">
-          {menuItems.map((item) => (
-            <Link 
-              key={item.path} 
-              to={item.path}
-              className={cn(
-                "flex items-center gap-3 px-4 py-3 rounded-xl transition-all font-medium",
-                window.location.pathname === item.path 
-                  ? "bg-black text-white" 
-                  : "text-gray-500 hover:text-black hover:bg-gray-50"
-              )}
-            >
-              <item.icon size={20} />
-              {item.label}
-            </Link>
-          ))}
-        </nav>
-        <div className="p-4 border-t border-black/5">
-          <button 
-            onClick={logout}
-            className="flex items-center gap-3 px-4 py-3 w-full text-red-500 hover:bg-red-50 rounded-xl transition-all font-medium"
-          >
-            <LogOut size={20} />
-            Logout
-          </button>
-        </div>
+        <NavContent />
       </aside>
+
+      {/* Mobile Menu Overlay */}
+      <AnimatePresence>
+        {isMobileMenuOpen && (
+          <div className="fixed inset-0 z-50 md:hidden">
+            <motion.div 
+              initial={{ opacity: 0 }}
+              animate={{ opacity: 1 }}
+              exit={{ opacity: 0 }}
+              onClick={() => setIsMobileMenuOpen(false)}
+              className="absolute inset-0 bg-black/40 backdrop-blur-sm"
+            />
+            <motion.aside 
+              initial={{ x: -280 }}
+              animate={{ x: 0 }}
+              exit={{ x: -280 }}
+              className="absolute top-0 left-0 bottom-0 w-72 bg-white shadow-2xl flex flex-col"
+            >
+              <NavContent />
+            </motion.aside>
+          </div>
+        )}
+      </AnimatePresence>
 
       {/* Main */}
       <main className="flex-1 flex flex-col min-w-0">
-        <header className="h-16 bg-white border-b border-black/5 flex items-center justify-between px-8 sticky top-0 z-40">
+        <header className="h-16 bg-white border-b border-black/5 flex items-center justify-between px-4 md:px-8 sticky top-0 z-40">
           <div className="flex items-center gap-4">
-            <div className="md:hidden">
+            <button 
+              onClick={() => setIsMobileMenuOpen(true)}
+              className="md:hidden p-2 hover:bg-gray-100 rounded-lg transition-colors"
+            >
+              <Menu size={24} />
+            </button>
+            <div className="hidden md:block">
               <Wifi size={24} />
             </div>
             {user?.role === 'admin' && (
               <div className="flex items-center gap-2 px-3 py-1.5 bg-gray-50 border border-black/5 rounded-full">
                 <div className={cn("w-2 h-2 rounded-full", status?.connected ? "bg-green-500 animate-pulse" : "bg-red-500")} />
-                <span className="text-[10px] font-bold uppercase tracking-wider text-gray-500">
+                <span className="text-[10px] font-bold uppercase tracking-wider text-gray-500 hidden sm:inline">
                   MikroTik: {status?.connected ? "Connected" : "Disconnected"}
+                </span>
+                <span className="text-[10px] font-bold uppercase tracking-wider text-gray-500 sm:hidden">
+                  {status?.connected ? "Online" : "Offline"}
                 </span>
               </div>
             )}
@@ -803,7 +951,7 @@ const Layout = ({ children }: { children: React.ReactNode }) => {
             </div>
           </div>
         </header>
-        <div className="p-8 overflow-y-auto">
+        <div className="p-4 md:p-8 overflow-y-auto">
           <motion.div
             initial={{ opacity: 0, y: 10 }}
             animate={{ opacity: 1, y: 0 }}
@@ -946,7 +1094,9 @@ const SettingsPage = () => {
     mikrotik_host: '',
     mikrotik_port: '8728',
     mikrotik_user: '',
-    mikrotik_password: ''
+    mikrotik_password: '',
+    bkash_number: '',
+    nagad_number: ''
   });
   const [saving, setSaving] = useState(false);
   const [testing, setTesting] = useState(false);
@@ -1088,16 +1238,52 @@ const SettingsPage = () => {
 
       <Card className="space-y-6">
         <h3 className="font-bold flex items-center gap-2"><CreditCard size={18} /> Payment Gateways</h3>
-        <div className="space-y-4">
-          <div className="flex items-center justify-between p-4 bg-gray-50 rounded-xl">
-            <span className="font-medium">bKash Integration</span>
-            <span className="text-xs text-green-600 font-bold uppercase">Connected</span>
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+          <div className="p-4 bg-[#D12053]/5 rounded-xl border border-[#D12053]/10 space-y-4">
+            <div className="flex items-center justify-between">
+              <div className="flex items-center gap-2">
+                <div className="w-8 h-8 bg-[#D12053] rounded-lg flex items-center justify-center text-white font-bold">b</div>
+                <span className="font-bold text-[#D12053]">bKash</span>
+              </div>
+              <button 
+                onClick={() => setSettings({...settings, bkash_number: ''})}
+                className="text-[10px] font-bold text-red-500 uppercase hover:underline"
+              >
+                Delete
+              </button>
+            </div>
+            <Input 
+              label="bKash Personal Number" 
+              value={settings.bkash_number || ''} 
+              onChange={(e: any) => setSettings({...settings, bkash_number: e.target.value})}
+              placeholder="017XXXXXXXX"
+            />
           </div>
-          <div className="flex items-center justify-between p-4 bg-gray-50 rounded-xl">
-            <span className="font-medium">Nagad Integration</span>
-            <span className="text-xs text-gray-400 font-bold uppercase">Not Configured</span>
+
+          <div className="p-4 bg-[#F7941D]/5 rounded-xl border border-[#F7941D]/10 space-y-4">
+            <div className="flex items-center justify-between">
+              <div className="flex items-center gap-2">
+                <div className="w-8 h-8 bg-[#F7941D] rounded-lg flex items-center justify-center text-white font-bold">n</div>
+                <span className="font-bold text-[#F7941D]">Nagad</span>
+              </div>
+              <button 
+                onClick={() => setSettings({...settings, nagad_number: ''})}
+                className="text-[10px] font-bold text-red-500 uppercase hover:underline"
+              >
+                Delete
+              </button>
+            </div>
+            <Input 
+              label="Nagad Personal Number" 
+              value={settings.nagad_number || ''} 
+              onChange={(e: any) => setSettings({...settings, nagad_number: e.target.value})}
+              placeholder="017XXXXXXXX"
+            />
           </div>
         </div>
+        <Button className="w-full" onClick={handleSave} disabled={saving}>
+          {saving ? "Saving Payment Settings..." : "Save Payment Gateways"}
+        </Button>
       </Card>
     </div>
   );
@@ -1132,8 +1318,14 @@ export default function App() {
   useEffect(() => {
     const savedUser = localStorage.getItem('user');
     if (savedUser) {
-      setUser(JSON.parse(savedUser));
-      fetchMikrotikStatus();
+      try {
+        setUser(JSON.parse(savedUser));
+        fetchMikrotikStatus();
+      } catch (e) {
+        console.error("Failed to parse saved user", e);
+        localStorage.removeItem('user');
+        localStorage.removeItem('token');
+      }
     }
     setLoading(false);
   }, []);

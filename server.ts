@@ -149,15 +149,62 @@ async function startServer() {
     res.json({ success: true, message: "Reboot command sent" });
   });
 
+  // Dashboard Stats
+  app.get("/api/admin/stats", authenticateToken, (req: any, res) => {
+    if (req.user.role !== 'admin') return res.sendStatus(403);
+    
+    const totalUsers = db.prepare("SELECT COUNT(*) as count FROM users WHERE role = 'customer'").get() as any;
+    const activeUsers = db.prepare("SELECT COUNT(*) as count FROM users WHERE role = 'customer' AND status = 'active'").get() as any;
+    const dueBills = db.prepare("SELECT COUNT(*) as count FROM bills WHERE status = 'unpaid'").get() as any;
+    const revenue = db.prepare("SELECT SUM(amount) as total FROM bills WHERE status = 'paid'").get() as any;
+    
+    res.json({
+      totalUsers: totalUsers.count,
+      activeUsers: activeUsers.count,
+      dueBills: dueBills.count,
+      revenue: revenue.total || 0
+    });
+  });
+
   app.post("/api/users", authenticateToken, (req: any, res) => {
     if (req.user.role !== 'admin') return res.sendStatus(403);
     const { username, password, full_name, address, phone, package_name, monthly_fee } = req.body;
     try {
       const result = db.prepare(`
-        INSERT INTO users (username, password, full_name, address, phone, package_name, monthly_fee)
-        VALUES (?, ?, ?, ?, ?, ?, ?)
+        INSERT INTO users (username, password, full_name, address, phone, package_name, monthly_fee, role, status)
+        VALUES (?, ?, ?, ?, ?, ?, ?, 'customer', 'active')
       `).run(username, password, full_name, address, phone, package_name, monthly_fee);
       res.json({ id: result.lastInsertRowid });
+    } catch (e: any) {
+      res.status(400).json({ error: e.message });
+    }
+  });
+
+  app.put("/api/users/:id", authenticateToken, (req: any, res) => {
+    if (req.user.role !== 'admin') return res.sendStatus(403);
+    const { id } = req.params;
+    const { username, full_name, address, phone, package_name, monthly_fee } = req.body;
+    try {
+      db.prepare(`
+        UPDATE users 
+        SET username = ?, full_name = ?, address = ?, phone = ?, package_name = ?, monthly_fee = ?
+        WHERE id = ? AND role = 'customer'
+      `).run(username, full_name, address, phone, package_name, monthly_fee, id);
+      res.json({ success: true });
+    } catch (e: any) {
+      res.status(400).json({ error: e.message });
+    }
+  });
+
+  app.delete("/api/users/:id", authenticateToken, (req: any, res) => {
+    if (req.user.role !== 'admin') return res.sendStatus(403);
+    const { id } = req.params;
+    try {
+      // Also delete associated bills and tickets to maintain integrity
+      db.prepare("DELETE FROM bills WHERE user_id = ?").run(id);
+      db.prepare("DELETE FROM tickets WHERE user_id = ?").run(id);
+      db.prepare("DELETE FROM users WHERE id = ? AND role = 'customer'").run(id);
+      res.json({ success: true });
     } catch (e: any) {
       res.status(400).json({ error: e.message });
     }
