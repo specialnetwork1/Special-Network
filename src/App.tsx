@@ -328,9 +328,22 @@ const UserManagement = () => {
     username: '',
     password: '',
     full_name: '',
+    client_code: '',
+    ip_address: '',
+    mobile: '',
     phone: '',
+    zone: '',
     package_name: '',
-    monthly_fee: ''
+    speed: '',
+    monthly_fee: '',
+    received_amount: '0',
+    vat: '0',
+    due_amount: '0',
+    advance_amount: '0',
+    expiry_date: '',
+    received_date: '',
+    server_name: '',
+    billing_status: 'unpaid'
   });
 
   const fetchUsers = () => {
@@ -355,7 +368,8 @@ const UserManagement = () => {
     setFormData({
       ...formData,
       package_name: packageName,
-      monthly_fee: pkg ? pkg.price.toString() : formData.monthly_fee
+      monthly_fee: pkg ? pkg.price.toString() : formData.monthly_fee,
+      speed: pkg ? pkg.speed : formData.speed
     });
   };
 
@@ -365,9 +379,22 @@ const UserManagement = () => {
       username: '',
       password: '',
       full_name: '',
+      client_code: '',
+      ip_address: '',
+      mobile: '',
       phone: '',
+      zone: '',
       package_name: '',
-      monthly_fee: ''
+      speed: '',
+      monthly_fee: '',
+      received_amount: '0',
+      vat: '0',
+      due_amount: '0',
+      advance_amount: '0',
+      expiry_date: '',
+      received_date: '',
+      server_name: '',
+      billing_status: 'unpaid'
     });
     setShowModal(true);
   };
@@ -378,9 +405,22 @@ const UserManagement = () => {
       username: user.username,
       password: user.password,
       full_name: user.full_name,
+      client_code: user.client_code || '',
+      ip_address: user.ip_address || '',
+      mobile: user.mobile || '',
       phone: user.phone || '',
+      zone: user.zone || '',
       package_name: user.package_name || '',
-      monthly_fee: user.monthly_fee?.toString() || ''
+      speed: user.speed || '',
+      monthly_fee: user.monthly_fee?.toString() || '',
+      received_amount: user.received_amount?.toString() || '0',
+      vat: user.vat?.toString() || '0',
+      due_amount: user.due_amount?.toString() || '0',
+      advance_amount: user.advance_amount?.toString() || '0',
+      expiry_date: user.expiry_date ? new Date(user.expiry_date).toISOString().split('T')[0] : '',
+      received_date: user.received_date ? new Date(user.received_date).toISOString().split('T')[0] : '',
+      server_name: user.server_name || '',
+      billing_status: user.billing_status || 'unpaid'
     });
     setShowModal(true);
   };
@@ -460,53 +500,102 @@ const UserManagement = () => {
         </div>
         <div className="overflow-x-auto">
           <table className="w-full text-left">
-            <thead className="bg-gray-50 text-[10px] font-bold uppercase text-gray-500 tracking-wider">
+            <thead className="bg-gray-50 text-[9px] font-bold uppercase text-gray-500 tracking-wider whitespace-nowrap">
               <tr>
-                <th className="px-6 py-4">Name</th>
-                <th className="px-6 py-4">PPPoE ID</th>
-                <th className="px-6 py-4">Password</th>
-                <th className="px-6 py-4">Package</th>
-                <th className="px-6 py-4">Fee</th>
-                <th className="px-6 py-4">Status</th>
-                <th className="px-6 py-4 text-right">Actions</th>
+                <th className="px-3 py-4">C.Code</th>
+                <th className="px-3 py-4">ID/IP</th>
+                <th className="px-3 py-4">Client Name</th>
+                <th className="px-3 py-4">Mobile</th>
+                <th className="px-3 py-4">Zone</th>
+                <th className="px-3 py-4">Package</th>
+                <th className="px-3 py-4">Speed</th>
+                <th className="px-3 py-4">Ex.Date</th>
+                <th className="px-3 py-4">M.Bill</th>
+                <th className="px-3 py-4">Received</th>
+                <th className="px-3 py-4">VAT</th>
+                <th className="px-3 py-4">Due</th>
+                <th className="px-3 py-4">Advance</th>
+                <th className="px-3 py-4">Rcv.Date</th>
+                <th className="px-3 py-4">R.Days</th>
+                <th className="px-3 py-4">R.Date</th>
+                <th className="px-3 py-4">Server</th>
+                <th className="px-3 py-4">M.Status</th>
+                <th className="px-3 py-4">B.Status</th>
+                <th className="px-3 py-4 text-right">Action</th>
               </tr>
             </thead>
-            <tbody className="divide-y divide-black/5">
-              {filteredUsers.map((user) => (
-                <tr key={user.id} className="hover:bg-gray-50 transition-colors">
-                  <td className="px-6 py-4 font-medium">{user.full_name}</td>
-                  <td className="px-6 py-4 text-gray-500">{user.username}</td>
-                  <td className="px-6 py-4 text-gray-500 font-mono text-xs">{user.password}</td>
-                  <td className="px-6 py-4">
-                    <span className="px-2 py-1 bg-blue-50 text-blue-600 rounded-lg text-xs font-medium">
-                      {user.package_name || '5 Mbps'}
-                    </span>
-                  </td>
-                  <td className="px-6 py-4 font-bold">৳{user.monthly_fee || 500}</td>
-                  <td className="px-6 py-4">
-                    <span className={cn(
-                      "flex items-center gap-1.5 text-xs font-bold uppercase",
-                      user.status === 'active' ? "text-green-600" : "text-red-600"
-                    )}>
-                      <div className={cn("w-1.5 h-1.5 rounded-full", user.status === 'active' ? "bg-green-600" : "bg-red-600")} />
-                      {user.status}
-                    </span>
-                  </td>
-                  <td className="px-6 py-4 text-right flex items-center justify-end gap-2">
-                    <Button 
-                      variant="secondary" 
-                      className={cn("text-[10px] py-1 px-2", user.status === 'active' ? "text-red-500" : "text-green-500")}
-                      onClick={() => toggleUserStatus(user)}
-                    >
-                      {user.status === 'active' ? 'Disable' : 'Enable'}
-                    </Button>
-                    <Button variant="ghost" className="text-xs" onClick={() => handleOpenEdit(user)}>Edit</Button>
-                    <button onClick={() => deleteUser(user.id)} className="p-2 text-red-500 hover:bg-red-50 rounded-lg transition-colors">
-                      <XCircle size={18} />
-                    </button>
-                  </td>
-                </tr>
-              ))}
+            <tbody className="divide-y divide-black/5 text-[11px] whitespace-nowrap">
+              {filteredUsers.map((user) => {
+                const expiryDate = user.expiry_date ? new Date(user.expiry_date) : null;
+                const remainingDays = expiryDate ? Math.ceil((expiryDate.getTime() - new Date().getTime()) / (1000 * 60 * 60 * 24)) : 0;
+                
+                return (
+                  <tr key={user.id} className="hover:bg-gray-50 transition-colors">
+                    <td className="px-3 py-4 font-mono">{user.client_code || 'N/A'}</td>
+                    <td className="px-3 py-4">
+                      <p className="font-bold">{user.username}</p>
+                      <p className="text-[9px] text-gray-400">{user.ip_address || '0.0.0.0'}</p>
+                    </td>
+                    <td className="px-3 py-4 font-medium">{user.full_name}</td>
+                    <td className="px-3 py-4">{user.mobile || user.phone || 'N/A'}</td>
+                    <td className="px-3 py-4">{user.zone || 'N/A'}</td>
+                    <td className="px-3 py-4">
+                      <span className="px-1.5 py-0.5 bg-blue-50 text-blue-600 rounded text-[9px] font-bold">
+                        {user.package_name || 'N/A'}
+                      </span>
+                    </td>
+                    <td className="px-3 py-4">{user.speed || 'N/A'}</td>
+                    <td className="px-3 py-4 text-red-500 font-bold">
+                      {expiryDate ? expiryDate.toLocaleDateString('en-GB') : 'N/A'}
+                    </td>
+                    <td className="px-3 py-4 font-bold">৳{user.monthly_fee}</td>
+                    <td className="px-3 py-4 text-green-600 font-bold">৳{user.received_amount || 0}</td>
+                    <td className="px-3 py-4">৳{user.vat || 0}</td>
+                    <td className="px-3 py-4 text-red-600 font-bold">৳{user.due_amount || 0}</td>
+                    <td className="px-3 py-4 text-blue-600">৳{user.advance_amount || 0}</td>
+                    <td className="px-3 py-4">{user.received_date ? new Date(user.received_date).toLocaleDateString('en-GB') : 'N/A'}</td>
+                    <td className="px-3 py-4">
+                      <span className={cn(
+                        "px-1.5 py-0.5 rounded text-[9px] font-bold",
+                        remainingDays > 5 ? "bg-green-100 text-green-700" : "bg-red-100 text-red-700"
+                      )}>
+                        {remainingDays} Days
+                      </span>
+                    </td>
+                    <td className="px-3 py-4">{user.created_at ? new Date(user.created_at).toLocaleDateString('en-GB') : 'N/A'}</td>
+                    <td className="px-3 py-4 font-mono text-[9px]">{user.server_name || 'Main'}</td>
+                    <td className="px-3 py-4">
+                      <span className={cn(
+                        "px-1.5 py-0.5 rounded text-[9px] font-bold uppercase",
+                        user.status === 'active' ? "bg-green-100 text-green-700" : "bg-red-100 text-red-700"
+                      )}>
+                        {user.status}
+                      </span>
+                    </td>
+                    <td className="px-3 py-4">
+                      <span className={cn(
+                        "px-1.5 py-0.5 rounded text-[9px] font-bold uppercase",
+                        user.billing_status === 'paid' ? "bg-green-100 text-green-700" : "bg-yellow-100 text-yellow-700"
+                      )}>
+                        {user.billing_status || 'unpaid'}
+                      </span>
+                    </td>
+                    <td className="px-3 py-4 text-right">
+                      <div className="flex justify-end items-center gap-1">
+                        <button onClick={() => handleOpenEdit(user)} className="p-1.5 text-blue-500 hover:bg-blue-50 rounded transition-colors">
+                          <Settings size={14} />
+                        </button>
+                        <button onClick={() => toggleUserStatus(user)} className={cn("p-1.5 rounded transition-colors", user.status === 'active' ? "text-orange-500 hover:bg-orange-50" : "text-green-500 hover:bg-green-50")}>
+                          {user.status === 'active' ? <Clock size={14} /> : <CheckCircle2 size={14} />}
+                        </button>
+                        <button onClick={() => deleteUser(user.id)} className="p-1.5 text-red-500 hover:bg-red-50 rounded transition-colors">
+                          <XCircle size={14} />
+                        </button>
+                      </div>
+                    </td>
+                  </tr>
+                );
+              })}
             </tbody>
           </table>
         </div>
@@ -519,17 +608,25 @@ const UserManagement = () => {
               initial={{ scale: 0.9, opacity: 0 }}
               animate={{ scale: 1, opacity: 1 }}
               exit={{ scale: 0.9, opacity: 0 }}
-              className="w-full max-w-lg"
+              className="w-full max-w-3xl max-h-[90vh] overflow-y-auto"
             >
               <Card className="p-8">
                 <h3 className="text-xl font-bold mb-6">{editingUser ? 'Edit Subscriber' : 'Add New Subscriber'}</h3>
-                <form onSubmit={handleSubmit} className="space-y-4">
-                  <div className="grid grid-cols-2 gap-4">
+                <form onSubmit={handleSubmit} className="space-y-6">
+                  <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+                    <div className="md:col-span-2">
+                      <Input 
+                        label="Full Name" 
+                        value={formData.full_name} 
+                        onChange={(e: any) => setFormData({...formData, full_name: e.target.value})}
+                        required
+                      />
+                    </div>
                     <Input 
-                      label="Full Name" 
-                      value={formData.full_name} 
-                      onChange={(e: any) => setFormData({...formData, full_name: e.target.value})}
-                      required
+                      label="Client Code" 
+                      value={formData.client_code} 
+                      onChange={(e: any) => setFormData({...formData, client_code: e.target.value})}
+                      placeholder="C-001"
                     />
                     <Input 
                       label="PPPoE ID" 
@@ -546,9 +643,26 @@ const UserManagement = () => {
                       required={!editingUser}
                     />
                     <Input 
-                      label="Phone" 
+                      label="IP Address" 
+                      value={formData.ip_address} 
+                      onChange={(e: any) => setFormData({...formData, ip_address: e.target.value})}
+                      placeholder="192.168.10.x"
+                    />
+                    <Input 
+                      label="Mobile" 
+                      value={formData.mobile} 
+                      onChange={(e: any) => setFormData({...formData, mobile: e.target.value})}
+                    />
+                    <Input 
+                      label="Phone (Alt)" 
                       value={formData.phone} 
                       onChange={(e: any) => setFormData({...formData, phone: e.target.value})}
+                    />
+                    <Input 
+                      label="Zone" 
+                      value={formData.zone} 
+                      onChange={(e: any) => setFormData({...formData, zone: e.target.value})}
+                      placeholder="e.g. Sector 7"
                     />
                     <div className="space-y-1.5">
                       <label className="text-xs font-semibold uppercase tracking-wider text-gray-500">Package</label>
@@ -565,12 +679,72 @@ const UserManagement = () => {
                       </select>
                     </div>
                     <Input 
+                      label="Speed" 
+                      value={formData.speed} 
+                      onChange={(e: any) => setFormData({...formData, speed: e.target.value})}
+                      placeholder="e.g. 10 Mbps"
+                    />
+                    <Input 
                       label="Monthly Fee" 
                       type="number"
                       value={formData.monthly_fee} 
                       onChange={(e: any) => setFormData({...formData, monthly_fee: e.target.value})}
                       required
                     />
+                    <Input 
+                      label="Received Amount" 
+                      type="number"
+                      value={formData.received_amount} 
+                      onChange={(e: any) => setFormData({...formData, received_amount: e.target.value})}
+                    />
+                    <Input 
+                      label="VAT (%)" 
+                      type="number"
+                      value={formData.vat} 
+                      onChange={(e: any) => setFormData({...formData, vat: e.target.value})}
+                    />
+                    <Input 
+                      label="Due Amount" 
+                      type="number"
+                      value={formData.due_amount} 
+                      onChange={(e: any) => setFormData({...formData, due_amount: e.target.value})}
+                    />
+                    <Input 
+                      label="Advance Amount" 
+                      type="number"
+                      value={formData.advance_amount} 
+                      onChange={(e: any) => setFormData({...formData, advance_amount: e.target.value})}
+                    />
+                    <Input 
+                      label="Expiry Date" 
+                      type="date"
+                      value={formData.expiry_date} 
+                      onChange={(e: any) => setFormData({...formData, expiry_date: e.target.value})}
+                    />
+                    <Input 
+                      label="Received Date" 
+                      type="date"
+                      value={formData.received_date} 
+                      onChange={(e: any) => setFormData({...formData, received_date: e.target.value})}
+                    />
+                    <Input 
+                      label="Server" 
+                      value={formData.server_name} 
+                      onChange={(e: any) => setFormData({...formData, server_name: e.target.value})}
+                      placeholder="e.g. Core-Router"
+                    />
+                    <div className="space-y-1.5">
+                      <label className="text-xs font-semibold uppercase tracking-wider text-gray-500">Billing Status</label>
+                      <select 
+                        className="w-full px-4 py-2.5 bg-gray-50 border border-black/5 rounded-xl focus:outline-none focus:ring-2 focus:ring-black/5 transition-all"
+                        value={formData.billing_status}
+                        onChange={(e) => setFormData({...formData, billing_status: e.target.value})}
+                      >
+                        <option value="unpaid">Unpaid</option>
+                        <option value="paid">Paid</option>
+                        <option value="partial">Partial</option>
+                      </select>
+                    </div>
                   </div>
                   <div className="flex gap-3 pt-4">
                     <Button type="submit" className="flex-1">{editingUser ? 'Update User' : 'Create User'}</Button>

@@ -18,10 +18,23 @@ db.exec(`
     username TEXT UNIQUE,
     password TEXT,
     full_name TEXT,
+    client_code TEXT,
+    ip_address TEXT,
+    mobile TEXT,
     address TEXT,
-    phone TEXT,
+    zone TEXT,
     package_name TEXT,
+    speed TEXT,
     monthly_fee REAL,
+    received_amount REAL DEFAULT 0,
+    vat REAL DEFAULT 0,
+    due_amount REAL DEFAULT 0,
+    advance_amount REAL DEFAULT 0,
+    expiry_date DATETIME,
+    received_date DATETIME,
+    server_name TEXT,
+    mikrotik_status TEXT DEFAULT 'active',
+    billing_status TEXT DEFAULT 'unpaid',
     mikrotik_id TEXT,
     status TEXT DEFAULT 'active',
     role TEXT DEFAULT 'customer',
@@ -231,12 +244,26 @@ async function startServer() {
 
   app.post("/api/users", authenticateToken, (req: any, res) => {
     if (req.user.role !== 'admin') return res.sendStatus(403);
-    const { username, password, full_name, address, phone, package_name, monthly_fee } = req.body;
+    const { 
+      username, password, full_name, client_code, ip_address, mobile, address, 
+      zone, package_name, speed, monthly_fee, received_amount, vat, due_amount, 
+      advance_amount, expiry_date, received_date, server_name, billing_status 
+    } = req.body;
     try {
       const result = db.prepare(`
-        INSERT INTO users (username, password, full_name, address, phone, package_name, monthly_fee, role, status)
-        VALUES (?, ?, ?, ?, ?, ?, ?, 'customer', 'active')
-      `).run(username, password, full_name, address, phone, package_name, monthly_fee);
+        INSERT INTO users (
+          username, password, full_name, client_code, ip_address, mobile, address, 
+          zone, package_name, speed, monthly_fee, received_amount, vat, due_amount, 
+          advance_amount, expiry_date, received_date, server_name, billing_status, 
+          role, status
+        )
+        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'customer', 'active')
+      `).run(
+        username, password, full_name, client_code, ip_address, mobile, address, 
+        zone, package_name, speed, monthly_fee, received_amount || 0, vat || 0, 
+        due_amount || 0, advance_amount || 0, expiry_date, received_date, 
+        server_name, billing_status || 'unpaid'
+      );
       res.json({ id: result.lastInsertRowid });
     } catch (e: any) {
       res.status(400).json({ error: e.message });
@@ -246,20 +273,42 @@ async function startServer() {
   app.put("/api/users/:id", authenticateToken, (req: any, res) => {
     if (req.user.role !== 'admin') return res.sendStatus(403);
     const { id } = req.params;
-    const { username, password, full_name, address, phone, package_name, monthly_fee } = req.body;
+    const { 
+      username, password, full_name, client_code, ip_address, mobile, address, 
+      zone, package_name, speed, monthly_fee, received_amount, vat, due_amount, 
+      advance_amount, expiry_date, received_date, server_name, billing_status 
+    } = req.body;
     try {
       if (password && password.trim() !== '') {
         db.prepare(`
           UPDATE users 
-          SET username = ?, password = ?, full_name = ?, address = ?, phone = ?, package_name = ?, monthly_fee = ?
+          SET username = ?, password = ?, full_name = ?, client_code = ?, ip_address = ?, 
+              mobile = ?, address = ?, zone = ?, package_name = ?, speed = ?, 
+              monthly_fee = ?, received_amount = ?, vat = ?, due_amount = ?, 
+              advance_amount = ?, expiry_date = ?, received_date = ?, 
+              server_name = ?, billing_status = ?
           WHERE id = ? AND role = 'customer'
-        `).run(username, password, full_name, address, phone, package_name, monthly_fee, id);
+        `).run(
+          username, password, full_name, client_code, ip_address, mobile, address, 
+          zone, package_name, speed, monthly_fee, received_amount || 0, vat || 0, 
+          due_amount || 0, advance_amount || 0, expiry_date, received_date, 
+          server_name, billing_status || 'unpaid', id
+        );
       } else {
         db.prepare(`
           UPDATE users 
-          SET username = ?, full_name = ?, address = ?, phone = ?, package_name = ?, monthly_fee = ?
+          SET username = ?, full_name = ?, client_code = ?, ip_address = ?, 
+              mobile = ?, address = ?, zone = ?, package_name = ?, speed = ?, 
+              monthly_fee = ?, received_amount = ?, vat = ?, due_amount = ?, 
+              advance_amount = ?, expiry_date = ?, received_date = ?, 
+              server_name = ?, billing_status = ?
           WHERE id = ? AND role = 'customer'
-        `).run(username, full_name, address, phone, package_name, monthly_fee, id);
+        `).run(
+          username, full_name, client_code, ip_address, mobile, address, 
+          zone, package_name, speed, monthly_fee, received_amount || 0, vat || 0, 
+          due_amount || 0, advance_amount || 0, expiry_date, received_date, 
+          server_name, billing_status || 'unpaid', id
+        );
       }
       res.json({ success: true });
     } catch (e: any) {
