@@ -54,6 +54,26 @@ db.exec(`
     key TEXT PRIMARY KEY,
     value TEXT
   );
+
+  CREATE TABLE IF NOT EXISTS packages (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    name TEXT,
+    price REAL,
+    speed TEXT,
+    created_at DATETIME DEFAULT CURRENT_TIMESTAMP
+  );
+
+  CREATE TABLE IF NOT EXISTS port_forwarding (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    description TEXT,
+    internal_host TEXT,
+    protocol TEXT,
+    external_port TEXT,
+    internal_port TEXT,
+    validity_days INTEGER,
+    expiry_date DATETIME,
+    created_at DATETIME DEFAULT CURRENT_TIMESTAMP
+  );
 `);
 
 // Seed Admin if not exists
@@ -88,10 +108,28 @@ if (settingsCount.count === 0) {
   insertSetting.run('mikrotik_port', '8728');
   insertSetting.run('mikrotik_user', 'admin');
   insertSetting.run('mikrotik_password', 'password');
+  insertSetting.run('company_name', 'My ISP Manager');
+  insertSetting.run('company_logo', 'https://picsum.photos/seed/isp/200/200');
+  insertSetting.run('bkash_number', '01700000000');
+  insertSetting.run('nagad_number', '01800000000');
+  insertSetting.run('rocket_number', '01900000000');
+}
+
+// Seed default packages if empty
+const packagesCount = db.prepare("SELECT COUNT(*) as count FROM packages").get() as any;
+if (packagesCount.count === 0) {
+  const insertPackage = db.prepare("INSERT INTO packages (name, price, speed) VALUES (?, ?, ?)");
+  insertPackage.run('5 Mbps Starter', 500, '5M');
+  insertPackage.run('10 Mbps Standard', 800, '10M');
+  insertPackage.run('20 Mbps Premium', 1200, '20M');
 }
 
 async function startServer() {
   const app = express();
+  app.use((req, res, next) => {
+    console.log(`${req.method} ${req.url}`);
+    next();
+  });
   app.use(express.json());
   const PORT = 3000;
 
@@ -110,14 +148,21 @@ async function startServer() {
     });
   };
 
+  app.get("/test", (req, res) => {
+    res.send("Server is working!");
+  });
   // API Routes
+  app.get("/api/health", (req, res) => {
+    res.json({ status: "ok", mode: process.env.NODE_ENV || "development" });
+  });
   app.post("/api/login", (req, res) => {
     const { username, password } = req.body;
     const user = db.prepare("SELECT * FROM users WHERE username = ? AND password = ?").get(username, password) as any;
     
     if (user) {
       const token = jwt.sign({ id: user.id, username: user.username, role: user.role }, JWT_SECRET);
-      res.json({ token, user: { id: user.id, username: user.username, role: user.role, full_name: user.full_name } });
+      const { password: _, ...userWithoutPassword } = user;
+      res.json({ token, user: userWithoutPassword });
     } else {
       res.status(401).json({ error: "Invalid credentials" });
     }
@@ -147,6 +192,24 @@ async function startServer() {
     if (req.user.role !== 'admin') return res.sendStatus(403);
     // Logic to reboot MikroTik would go here
     res.json({ success: true, message: "Reboot command sent" });
+  });
+
+  app.put("/api/profile", authenticateToken, (req: any, res) => {
+    const { full_name, address, phone, password } = req.body;
+    try {
+      if (password && password.trim() !== '') {
+        db.prepare("UPDATE users SET full_name = ?, address = ?, phone = ?, password = ? WHERE id = ?")
+          .run(full_name, address, phone, password, req.user.id);
+      } else {
+        db.prepare("UPDATE users SET full_name = ?, address = ?, phone = ? WHERE id = ?")
+          .run(full_name, address, phone, req.user.id);
+      }
+      const updatedUser = db.prepare("SELECT * FROM users WHERE id = ?").get(req.user.id) as any;
+      const { password: _, ...userWithoutPassword } = updatedUser;
+      res.json({ success: true, user: userWithoutPassword });
+    } catch (e: any) {
+      res.status(400).json({ error: e.message });
+    }
   });
 
   // Dashboard Stats
@@ -183,13 +246,21 @@ async function startServer() {
   app.put("/api/users/:id", authenticateToken, (req: any, res) => {
     if (req.user.role !== 'admin') return res.sendStatus(403);
     const { id } = req.params;
-    const { username, full_name, address, phone, package_name, monthly_fee } = req.body;
+    const { username, password, full_name, address, phone, package_name, monthly_fee } = req.body;
     try {
-      db.prepare(`
-        UPDATE users 
-        SET username = ?, full_name = ?, address = ?, phone = ?, package_name = ?, monthly_fee = ?
-        WHERE id = ? AND role = 'customer'
-      `).run(username, full_name, address, phone, package_name, monthly_fee, id);
+      if (password && password.trim() !== '') {
+        db.prepare(`
+          UPDATE users 
+          SET username = ?, password = ?, full_name = ?, address = ?, phone = ?, package_name = ?, monthly_fee = ?
+          WHERE id = ? AND role = 'customer'
+        `).run(username, password, full_name, address, phone, package_name, monthly_fee, id);
+      } else {
+        db.prepare(`
+          UPDATE users 
+          SET username = ?, full_name = ?, address = ?, phone = ?, package_name = ?, monthly_fee = ?
+          WHERE id = ? AND role = 'customer'
+        `).run(username, full_name, address, phone, package_name, monthly_fee, id);
+      }
       res.json({ success: true });
     } catch (e: any) {
       res.status(400).json({ error: e.message });
@@ -215,12 +286,13 @@ async function startServer() {
     let bills;
     if (req.user.role === 'admin') {
       bills = db.prepare(`
-        SELECT bills.*, users.full_name as user_name 
+        SELECT bills.*, users.full_name as user_name, users.phone as user_phone 
         FROM bills 
         JOIN users ON bills.user_id = users.id
+        ORDER BY bills.created_at DESC
       `).all();
     } else {
-      bills = db.prepare("SELECT * FROM bills WHERE user_id = ?").all(req.user.id);
+      bills = db.prepare("SELECT * FROM bills WHERE user_id = ? ORDER BY created_at DESC").all(req.user.id);
     }
     res.json(bills);
   });
@@ -230,6 +302,20 @@ async function startServer() {
     db.prepare("UPDATE bills SET status = 'paid', payment_method = ?, transaction_id = ? WHERE id = ? AND user_id = ?")
       .run(payment_method, transaction_id, bill_id, req.user.id);
     res.json({ success: true });
+  });
+
+  app.post("/api/admin/create-bill", authenticateToken, (req: any, res) => {
+    if (req.user.role !== 'admin') return res.sendStatus(403);
+    const { user_id, month, amount } = req.body;
+    try {
+      db.prepare(`
+        INSERT INTO bills (user_id, month, amount, status)
+        VALUES (?, ?, ?, 'unpaid')
+      `).run(user_id, month, amount);
+      res.json({ success: true });
+    } catch (e: any) {
+      res.status(400).json({ error: e.message });
+    }
   });
 
   // Tickets
@@ -256,10 +342,13 @@ async function startServer() {
 
   // Settings Management
   app.get("/api/settings", authenticateToken, (req: any, res) => {
-    if (req.user.role !== 'admin') return res.sendStatus(403);
     const settings = db.prepare("SELECT * FROM settings").all() as any[];
     const settingsObj = settings.reduce((acc, curr) => {
-      acc[curr.key] = curr.value;
+      // Only expose public settings to non-admins
+      const publicKeys = ['bkash_number', 'nagad_number', 'rocket_number', 'company_name', 'company_logo'];
+      if (req.user.role === 'admin' || publicKeys.includes(curr.key)) {
+        acc[curr.key] = curr.value;
+      }
       return acc;
     }, {});
     res.json(settingsObj);
@@ -277,6 +366,59 @@ async function startServer() {
     });
 
     transaction(settings);
+    res.json({ success: true });
+  });
+
+  // Package Management
+  app.get("/api/packages", authenticateToken, (req: any, res) => {
+    const packages = db.prepare("SELECT * FROM packages").all();
+    res.json(packages);
+  });
+
+  app.post("/api/packages", authenticateToken, (req: any, res) => {
+    if (req.user.role !== 'admin') return res.sendStatus(403);
+    const { name, price, speed } = req.body;
+    db.prepare("INSERT INTO packages (name, price, speed) VALUES (?, ?, ?)").run(name, price, speed);
+    res.json({ success: true });
+  });
+
+  app.put("/api/packages/:id", authenticateToken, (req: any, res) => {
+    if (req.user.role !== 'admin') return res.sendStatus(403);
+    const { name, price, speed } = req.body;
+    db.prepare("UPDATE packages SET name = ?, price = ?, speed = ? WHERE id = ?").run(name, price, speed, req.params.id);
+    res.json({ success: true });
+  });
+
+  app.delete("/api/packages/:id", authenticateToken, (req: any, res) => {
+    if (req.user.role !== 'admin') return res.sendStatus(403);
+    db.prepare("DELETE FROM packages WHERE id = ?").run(req.params.id);
+    res.json({ success: true });
+  });
+
+  // Port Forwarding Management
+  app.get("/api/port-forwarding", authenticateToken, (req: any, res) => {
+    if (req.user.role !== 'admin') return res.sendStatus(403);
+    const rules = db.prepare("SELECT * FROM port_forwarding ORDER BY created_at DESC").all();
+    res.json(rules);
+  });
+
+  app.post("/api/port-forwarding", authenticateToken, (req: any, res) => {
+    if (req.user.role !== 'admin') return res.sendStatus(403);
+    const { description, internal_host, protocol, external_port, internal_port, validity_days, expiry_date } = req.body;
+    try {
+      const result = db.prepare(`
+        INSERT INTO port_forwarding (description, internal_host, protocol, external_port, internal_port, validity_days, expiry_date)
+        VALUES (?, ?, ?, ?, ?, ?, ?)
+      `).run(description, internal_host, protocol, external_port, internal_port, validity_days, expiry_date);
+      res.json({ id: result.lastInsertRowid });
+    } catch (e: any) {
+      res.status(400).json({ error: e.message });
+    }
+  });
+
+  app.delete("/api/port-forwarding/:id", authenticateToken, (req: any, res) => {
+    if (req.user.role !== 'admin') return res.sendStatus(403);
+    db.prepare("DELETE FROM port_forwarding WHERE id = ?").run(req.params.id);
     res.json({ success: true });
   });
 
@@ -409,8 +551,13 @@ async function startServer() {
     if (req.user.role !== 'admin') return res.sendStatus(403);
     const { month } = req.body;
     
-    // Get all active customers
-    const users = db.prepare("SELECT id, monthly_fee FROM users WHERE role = 'customer' AND status = 'active'").all() as any[];
+    // Get all active customers with their package price
+    const users = db.prepare(`
+      SELECT users.id, COALESCE(packages.price, users.monthly_fee) as amount 
+      FROM users 
+      LEFT JOIN packages ON users.package_name = packages.name
+      WHERE users.role = 'customer' AND users.status = 'active'
+    `).all() as any[];
     
     // Check for existing bills for this month to avoid duplicates
     const checkExist = db.prepare("SELECT user_id FROM bills WHERE month = ?");
@@ -422,7 +569,7 @@ async function startServer() {
     const transaction = db.transaction((users) => {
       for (const user of users) {
         if (!existingUserIds.has(user.id)) {
-          insert.run(user.id, user.monthly_fee || 0, month);
+          insert.run(user.id, user.amount || 0, month);
           count++;
         }
       }
@@ -453,20 +600,30 @@ async function startServer() {
 
   // Vite middleware for development
   if (process.env.NODE_ENV !== "production") {
-    const vite = await createViteServer({
-      server: { middlewareMode: true },
-      appType: "spa",
-    });
-    app.use(vite.middlewares);
+    console.log("Starting Vite in middleware mode...");
+    try {
+      const vite = await createViteServer({
+        server: { middlewareMode: true },
+        appType: "spa",
+      });
+      app.use(vite.middlewares);
+      console.log("Vite middleware attached");
+    } catch (e) {
+      console.error("Failed to start Vite server:", e);
+    }
   } else {
+    console.log("Serving production build from dist...");
     app.use(express.static(path.join(__dirname, "dist")));
     app.get("*", (req, res) => {
+      console.log(`Serving index.html for ${req.url}`);
       res.sendFile(path.join(__dirname, "dist", "index.html"));
     });
   }
 
   app.listen(PORT, "0.0.0.0", () => {
     console.log(`Server running on http://localhost:${PORT}`);
+    console.log(`Environment: ${process.env.NODE_ENV || 'development'}`);
+    console.log(`Directory: ${__dirname}`);
   });
 }
 
